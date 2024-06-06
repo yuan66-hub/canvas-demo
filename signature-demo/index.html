@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手写签名</title>
+</head>
+
+<body>
+    <canvas width="600" height="400" id="canvas" style="background-color: #ddd;"></canvas>
+    <button id="confirm">生成图片</button>
+    <button id="pre">撤销</button>
+    <button id="rewrite">重写</button>
+
+    <img src="" alt="" id="signature">
+</body>
+
+<script>
+    window.onload = function () {
+        // 默认鼠标是没有按下的    
+        let isDown = false;
+        // 记录上一次鼠标的位置    
+        let lastX = 0; // x轴    
+        let lastY = 0; // y轴        
+        // 获取canvas
+        const canvas = document.getElementById("canvas");
+        // 获取canvas的上下文    
+        const ctx = canvas.getContext("2d");
+        // 定义线条的宽度，即画笔的粗细    
+        ctx.lineWidth = 3;
+        // 定义画笔的颜色    
+        ctx.strokeStyle = "#000";
+
+        // 这次要用数组来记录  撤销功能 
+        let points = []; // 这是一个笔画的点    
+        let allPonits = []; // 这是所有笔画的点    
+        /**
+          * 定义绘制方法
+          * 线条其实是由两个点连起来的一个线段
+          * 一个又一个的小线段，连起来就组成了一个线条
+          * 在画布上绘制线条，主要用到的三个核心方法      
+          * moveTo: 是 Canvas 2D API 将一个新的子路径的起始点移动到 (x，y) 坐标的法。   
+          * lineTo: 是 Canvas 2D API 使用直线连接子路径的终点到 x，y 坐标的法。      
+          * 当然，定义了起点和终点还不够，还需要手动调用开始绘制这个路径
+          * startX 和 startY 一起组成了起点的坐标
+          * endX 和 endY 一起组成了线段终点的坐标
+          */
+        function draw(startX, startY, endX, endY) {
+            // 起点        
+            ctx.moveTo(startX, startY);
+            // 终点        
+            ctx.lineTo(endX, endY);
+            // 调用 stroke，即可看到绘制的线条        
+            ctx.stroke();
+        }
+        // 监听鼠标按下，得到按下时鼠标在画布上的坐标    
+        canvas.addEventListener("mousedown", ({ x, y }) => {
+            isDown = true;
+            // 保存当前坐标作为起点
+            points.push({ x, y });
+            // 创建一个新的路径
+            ctx.beginPath();
+        }, false);
+        // 监听鼠标移动    
+        canvas.addEventListener("mousemove", ({ x, y }) => {
+            // 没有按下就不管
+            if (!isDown) return;
+            // 每次都取最后一个点，作为绘制的起点
+            const lastPoint = points.at(-1);
+            draw(lastPoint.x, lastPoint.y, x, y);
+            // 把当前的点保存起来，又作为下一次绘制的起点
+            points.push({ x, y });
+        }, false);
+        // 监听鼠标抬起
+        canvas.addEventListener("mouseup", () => {
+            isDown = false;
+            // 关闭路径
+            ctx.closePath();
+            // 鼠标抬起，说明当前这一笔就结束了，把这一笔的所有点的数组放到总的里面
+            allPonits.push(points);
+            // 清空这一笔画，为下一笔画做准备            
+            points = [];
+        }, false);
+        // 监听鼠标移出
+        canvas.addEventListener("mouseleave", () => {
+            // 移出canvas范围，也认为是鼠标抬起了，再移入需要重新按下鼠标，避免移出之后再抬起鼠标，重新进入画笔还能继续画的问题
+            isDown = false;
+            // 关闭路径
+            ctx.closePath();
+            // 如果是先移出范围，移出时就保存，这样也不会触发上面的监听鼠标抬起事件，也不会push。
+            if (points.length) {
+                allPonits.push(points);
+            }
+            // 移出时也清空，因为无法判断是先抬起还是先移出的。
+            points = [];
+        }, false);
+
+
+
+        // 生成图片
+        document.querySelector('#confirm').addEventListener('click', () => {
+            sign = canvas.toDataURL();// 把绘制完成的canvas转换为base64
+            document.querySelector('img').src = sign
+            console.log(sign)
+        })
+        function resetPath() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);// 清空绘制的内容
+
+        }
+        // 重写
+        document.querySelector('#rewrite').addEventListener('click', () => {
+            resetPath()
+            allPonits = []
+        })
+        // 上一步
+        document.querySelector('#pre').addEventListener('click', () => {
+            // canvas本身不会记录用户的每一步操作
+            // 要回到上一步，只能一次性清空所有的重新绘制
+            resetPath();
+            // 删除最后一个笔画
+            allPonits.pop();
+            // 遍历所有的笔画并重新绘制
+            // allPoints 是个二维数组
+            allPonits.forEach((ps) => {
+                ps.forEach((item, index) => {
+                    // 下一个坐标点
+                    let next = ps[index + 1];
+                    if (next) {
+                        // 有下一个点才执行，否则到最后一个会报错
+                        // 开始重新绘制
+                        ctx.beginPath();
+                        draw(item.x, item.y, next.x, next.y);
+                        ctx.closePath();
+                    }
+                });
+            });
+
+        })
+
+    };
+    //   移动端 横屏和竖屏监听
+    window.onorientationchange = function () {
+        if (window.orientation == 90 || window.orientation == -90) {
+            console.info('横屏了')
+        } else {
+            console.info('竖屏了')
+        }
+    }
+
+
+
+
+
+</script>
+
+</html>

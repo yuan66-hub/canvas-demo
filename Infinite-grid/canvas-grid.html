@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>canvas网格</title>
+</head>
+
+<body>
+    <script>
+        const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%">
+            <defs>
+            <pattern id="Pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                <line stroke="#ccc" fill="transparent" x1="39" y1="0" x2="39" y2="40"></line>
+                <line stroke="#ccc" fill="transparent" x1="0" y1="39" x2="40" y2="39"></line>
+            </pattern>
+            </defs>
+            <rect fill="url(#Pattern)" x="0" y="0" width="100%" height="100%"></rect>
+        </svg>`
+        const base64 = window.btoa(svg);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = 500;
+        const height = 500;
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        // ctx.scale(devicePixelRatio, devicePixelRatio);
+        document.body.appendChild(canvas);
+        const image = new Image();
+        image.src = `data:image/svg+xml;base64,${base64}`;
+        image.onload = function () {
+            const pattern = ctx.createPattern(image, 'repeat');
+            ctx.fillStyle = pattern;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    </script>
+</body>
+
+</html>

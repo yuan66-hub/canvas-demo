@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片裁剪功能</title>
+</head>
+
+<body>
+    <input type="file" id="imageLoader" accept="image/*">
+    <canvas id="canvas"></canvas>
+</body>
+
+<script>
+    /** 
+     * 1. 首先创建canvas对像
+       2. 指定canvas的高度宽度（非style的宽高）
+       3. 计算原图需要剪切的相关参数
+       4. 通过drawImage方法将需要的部分画上去
+       5. 通过toDataURL方法获取图片base64的值
+       6. 完成，后续可对base64值进行其他操作
+           * 
+     **/
+    window.onload = function () {
+        // 获取 canvas 元素和上下文
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 图片裁剪函数
+        function cropImage(event) {
+            const img = new Image();
+            img.onload = function () {
+                // 设置 canvas 的宽高
+                canvas.width = img.width;
+                canvas.height = img.height;
+                // 绘制图片
+                ctx.drawImage(img, 0, 0);
+
+                // 裁剪区域的坐标和大小
+                const x = 100; // 裁剪区域左上角 x 坐标
+                const y = 100; // 裁剪区域左上角 y 坐标
+                const width = 200; // 裁剪区域宽度
+                const height = 200; // 裁剪区域高度
+
+                // 创建一个新的 canvas 用于裁剪
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = width;
+                cropCanvas.height = height;
+                const cropCtx = cropCanvas.getContext('2d');
+
+                // 裁剪图片并绘制到新的 canvas 上
+                // sx, sy 是裁剪区域左上角的坐标
+                //dx,dy 在画布上裁剪后图像放置的 x,y坐标位置
+                //sw和sh为在原图中需要截取的宽高，最后会以缩放的方式以dw，dh的大小展示在canvas中
+                //drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)
+
+                cropCtx.drawImage(img, -x, -y, width, height, 0, 0, width, height);
+
+                // 显示裁剪后的图片
+                document.body.appendChild(cropCanvas);
+            };
+            img.src = URL.createObjectURL(event.target.files[0]);
+        }
+
+        // 监听文件加载输入框的 change 事件
+        document.getElementById('imageLoader').addEventListener('change', cropImage);
+    }
+</script>
+
+</html>
