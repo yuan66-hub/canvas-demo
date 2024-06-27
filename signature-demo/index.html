@@ -55,7 +55,8 @@
             // 调用 stroke，即可看到绘制的线条        
             ctx.stroke();
         }
-        // 监听鼠标按下，得到按下时鼠标在画布上的坐标    
+        // 监听鼠标按下，得到按下时鼠标在画布上的坐标  
+        // 移动端/小程序监听"touchstart"事件
         canvas.addEventListener("mousedown", ({ x, y }) => {
             isDown = true;
             // 保存当前坐标作为起点
@@ -64,6 +65,7 @@
             ctx.beginPath();
         }, false);
         // 监听鼠标移动    
+        // 移动端/小程序监听"touchmove"事件
         canvas.addEventListener("mousemove", ({ x, y }) => {
             // 没有按下就不管
             if (!isDown) return;
@@ -74,6 +76,7 @@
             points.push({ x, y });
         }, false);
         // 监听鼠标抬起
+        // 移动端/小程序监听"touchend"事件
         canvas.addEventListener("mouseup", () => {
             isDown = false;
             // 关闭路径
