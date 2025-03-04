@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片涂抹裁剪</title>
+  </head>
+  <style>
+    .canvas {
+      position: relative;
+      width: 400px;
+      height: 270px;
+    }
+    .daub {
+      position: absolute;
+    }
+    .prectemp {
+      position: relative;
+    }
+  </style>
+  <body>
+    <div class="shear">
+      <div>
+        <button id="derive">导出</button>
+        <button id="dedaub">涂抹</button>
+        <button id="shanew">重置</button>
+        <button id="sheraser">橡皮擦</button>
+      </div>
+      <div class="canvas"></div>
+    </div>
+    <div class="prectemp">
+      <div style="height: 22.81px">截取涂抹内容</div>
+      <div id="sheartemp"></div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        /**
+         * 涂抹截取
+         * 1、创建图片作为背景；
+         *
+         */
+        var isDaub = false; // 是否开启涂抹状态
+        var isErase = false; //是否开启橡皮擦
+        var brushSize = 10;
+        const width = 400;
+        const height = 300;
+        const img = document.createElement("img");
+        img.src = "./images/img.jpg";
+        img.classList.add("daub");
+        img.width = width;
+        img.height = height - 30;
+        document.getElementsByClassName("canvas")[0].appendChild(img);
+
+        const daub = document.createElement("canvas");
+        daub.classList.add("daub");
+        daub.width = width;
+        daub.height = height - 30;
+        document.getElementsByClassName("canvas")[0].appendChild(daub);
+
+        //2d画笔
+        var context4 = daub.getContext("2d");
+        context4.lineCap = "round";
+        context4.lineJoin = "round";
+        context4.lineWidth = 20;
+        context4.strokeStyle = "rgb(232 149 38/ 50%)"; //设置透明渡的颜色选取内容
+        /**
+         * 涂抹/橡皮擦事件
+         *
+         */
+        daubEvent();
+        function daubEvent() {
+          daub.onmousedown = function (event) {
+            if (!isDaub) return;
+            // 开始新的路径或继续现有路径
+            if (isErase) {
+              context4.globalCompositeOperation = "destination-out";
+            } else {
+              context4.globalCompositeOperation = "source-over";
+            }
+            context4.beginPath();
+            context4.moveTo(event.offsetX, event.offsetY);
+            daub.onmousemove = function (event) {
+              if (isErase) {
+                // 设置橡皮擦粗细
+                context4.lineWidth = 20; //设置字体10号
+                context4.strokeStyle = "rgba(0, 0, 0, 1)";
+                context4.globalAlpha = 1;
+              } else {
+                context4.strokeStyle = "rgb(232 149 38/ 75%)"; //设置透明渡的颜色选取内容
+                context4.lineWidth = brushSize; //设置字体10号
+                context4.globalAlpha = 0.01;
+              }
+              context4.lineTo(event.offsetX, event.offsetY);
+              context4.stroke();
+            };
+            daub.onmouseup = function (event) {
+              daub.onmousemove = null;
+              daub.onmouseup = null;
+            };
+          };
+        }
+        //点击【开始】可以进行涂抹
+        document.getElementById("dedaub").onclick = function () {
+          isDaub = !isDaub;
+          if (isDaub) {
+            document.getElementById("dedaub").innerText = "停止";
+          } else {
+            document.getElementById("dedaub").innerText = "涂抹";
+            isErase = false; //关闭橡皮擦
+          }
+        };
+
+        //点击【重置】清空画布内容
+        document.getElementById("shanew").onclick = function () {
+          if (!isDaub) return;
+          //清空画布先结束之前操作
+          context4.closePath();
+          context4.clearRect(0, 0, width, height);
+          context4.beginPath();
+          //设置橡皮擦
+          isErase = false;
+          daubEvent();
+        };
+        //点击【橡皮擦】可以进行橡皮擦
+        document.getElementById("sheraser").onclick = function () {
+          if (!isDaub) return;
+          isErase = !isErase;
+          if (isErase) {
+            document.getElementById("sheraser").innerText = "画笔";
+          } else {
+            document.getElementById("sheraser").innerText = "橡皮擦";
+          }
+          console.log("橡皮擦", isErase);
+          daubEvent();
+        };
+        //点击【导出】创建一张图片，循环图片rgb不透明的点，将原图内容放在这个位置
+        document.getElementById("derive").onclick = function () {
+          //判断是否生成过导出结果，存在则移除
+          document.querySelector("#newCanvas") &&
+            document.querySelector("#newCanvas").remove();
+          //调用contrast方法重新生成导出结果
+          contrast();
+        };
+        /**
+         * 根据图层点位，将图片内容绘制到新的canvas上
+         * text4data 旧图层的内容 （用户涂抹所有内容，即rgb不透明）获取所有像素的
+         * newCanvas 创建新的图层
+         * newcontext 新图层画笔
+         * 1、新图层newcontext引入需要裁剪的图片
+         * 2、图片加载完成，循环旧图层每个像素点，
+         * 3、判断text4data旧图层像素的是否透明，如果透明则将新图层对应内容区域也修改透明
+         */
+        function contrast() {
+          const text4data = context4.getImageData(0, 0, width, height).data;
+          // 创建一个新的canvas图层
+          const newCanvas = document.createElement("canvas");
+          newCanvas.id = "newCanvas";
+          const newcontext = newCanvas.getContext("2d");
+          // 设置Canvas的大小与图片一致
+          newCanvas.width = width;
+          newCanvas.height = height - 30;
+          const newimg = new Image();
+          newimg.src = "./images/img.jpg";
+
+          newimg.onload = function () {
+            // 将图片绘制到Canvas上 - 移到onload内部确保图片已加载
+            newcontext.drawImage(newimg, 0, 0, width, height);
+            const imageData = newcontext.getImageData(0, 0, width, height);
+            const newdata = imageData.data;
+            //循环每个像素点，如果是白色则  将其设为透明
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const index = (y * width + x) * 4;
+
+                const text4a = text4data[index + 3];
+
+                // 判断像素是否为主体区域（透明度大于0）
+                if (text4a > 0) {
+                  // const r = newdata[index];
+                  // const g = newdata[index + 1];
+                  // const b = newdata[index + 2];
+                  // const a = newdata[index + 3];
+                } else {
+                  newdata[index] = 0; // 红色通道
+                  newdata[index + 1] = 0; // 绿色通道
+                  newdata[index + 2] = 0; // 蓝色通道
+                  newdata[index + 3] = 0; // 透明度
+                }
+              }
+            }
+            // newdata = newcontext.getImageData(0, 0, width, height).putImageData(tempDate);
+            newcontext.putImageData(imageData, 0, 0);
+          };
+          document.getElementById("sheartemp").appendChild(newCanvas);
+        }
+      });
+    </script>
+  </body>
+</html>
