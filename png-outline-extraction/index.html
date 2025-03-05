@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PNG图片提取轮廓描边</title>
+    <script src="https://cdn.jsdelivr.net/npm/marchingsquares@1.3.3/dist/marchingsquares.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simplify-js@1.2.4/simplify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg.js@2.7.1/dist/svg.min.js"></script>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      h1 {
+        text-align: center;
+        color: #333;
+        margin-bottom: 30px;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .upload-section {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .canvas-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        justify-content: center;
+      }
+      .canvas-wrapper {
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      canvas {
+        max-width: 100%;
+        border: 1px solid #ddd;
+        background-color: #fff;
+      }
+      .controls {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-top: 20px;
+      }
+      .control-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input[type="file"] {
+        margin-bottom: 10px;
+        width: 100%;
+      }
+      input[type="range"] {
+        width: 100%;
+      }
+      input[type="color"] {
+        width: 50px;
+        height: 30px;
+        vertical-align: middle;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s;
+        margin-right: 10px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      .hidden {
+        display: none;
+      }
+      .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .slider-value {
+        min-width: 40px;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PNG图片提取轮廓描边</h1>
+
+    <div class="container">
+      <div class="upload-section">
+        <input type="file" id="imageLoader" accept="image/png" />
+        <p>支持的格式: PNG (带透明通道的图片效果最佳)</p>
+      </div>
+
+      <div class="controls hidden" id="controlsSection">
+        <div class="control-group">
+          <label for="outlineThreshold"
+            >轮廓检测阈值: <span id="thresholdValue">10</span></label
+          >
+          <div class="slider-container">
+            <input
+              type="range"
+              id="outlineThreshold"
+              min="1"
+              max="50"
+              value="10"
+            />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="outlineColor">轮廓颜色:</label>
+          <input type="color" id="outlineColor" value="#FF0000" />
+        </div>
+
+        <div class="control-group">
+          <label for="outlineWidth"
+            >轮廓宽度: <span id="widthValue">2</span>px</label
+          >
+          <div class="slider-container">
+            <input type="range" id="outlineWidth" min="1" max="10" value="2" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <button id="extractOutlineBtn">提取轮廓</button>
+          <button id="downloadBtn" class="hidden">下载结果</button>
+        </div>
+      </div>
+
+      <div class="canvas-container">
+        <div class="canvas-wrapper hidden" id="originalImageContainer">
+          <h3>原始图片</h3>
+          <canvas id="originalCanvas"></canvas>
+        </div>
+
+        <div class="canvas-wrapper hidden" id="outlineImageContainer">
+          <h3>轮廓描边结果</h3>
+          <canvas id="outlineCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 获取DOM元素
+      const imageLoader = document.getElementById("imageLoader");
+      const originalCanvas = document.getElementById("originalCanvas");
+      const outlineCanvas = document.getElementById("outlineCanvas");
+      const originalImageContainer = document.getElementById(
+        "originalImageContainer"
+      );
+      const outlineImageContainer = document.getElementById(
+        "outlineImageContainer"
+      );
+      const controlsSection = document.getElementById("controlsSection");
+      const extractOutlineBtn = document.getElementById("extractOutlineBtn");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const outlineThreshold = document.getElementById("outlineThreshold");
+      const thresholdValue = document.getElementById("thresholdValue");
+      const outlineColor = document.getElementById("outlineColor");
+      const outlineWidth = document.getElementById("outlineWidth");
+      const widthValue = document.getElementById("widthValue");
+
+      // 原始图像对象
+      let originalImage = null;
+
+      // 监听图片上传
+      imageLoader.addEventListener("change", handleImageUpload);
+
+      // 监听控制参数变化
+      outlineThreshold.addEventListener("input", updateThresholdValue);
+      outlineWidth.addEventListener("input", updateWidthValue);
+
+      // 提取轮廓按钮点击事件
+      extractOutlineBtn.addEventListener("click", extractOutline);
+
+      // 下载按钮点击事件
+      downloadBtn.addEventListener("click", downloadResult);
+
+      // 更新阈值显示
+      function updateThresholdValue() {
+        thresholdValue.textContent = outlineThreshold.value;
+      }
+
+      // 更新线宽显示
+      function updateWidthValue() {
+        widthValue.textContent = outlineWidth.value;
+      }
+
+      // 处理图片上传
+      function handleImageUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = function (event) {
+          originalImage = new Image();
+          originalImage.onload = function () {
+            // 显示原始图片
+            originalCanvas.width = originalImage.width;
+            originalCanvas.height = originalImage.height;
+            const originalCtx = originalCanvas.getContext("2d");
+            originalCtx.drawImage(originalImage, 0, 0);
+
+            // 设置轮廓画布大小
+            outlineCanvas.width = originalImage.width;
+            outlineCanvas.height = originalImage.height;
+
+            // 显示控制区域和画布容器
+            originalImageContainer.classList.remove("hidden");
+            outlineImageContainer.classList.remove("hidden");
+            controlsSection.classList.remove("hidden");
+          };
+          originalImage.src = event.target.result;
+        };
+
+        reader.readAsDataURL(file);
+      }
+
+      // 提取轮廓函数
+      function extractOutline() {
+        if (!originalImage) return;
+
+        const threshold = parseInt(outlineThreshold.value);
+        const lineWidth = parseInt(outlineWidth.value);
+        const color = outlineColor.value;
+
+        // 获取原始图像数据
+        const originalCtx = originalCanvas.getContext("2d");
+        const imageData = originalCtx.getImageData(
+          0,
+          0,
+          originalCanvas.width,
+          originalCanvas.height
+        );
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+
+        // 创建轮廓画布上下文
+        const outlineCtx = outlineCanvas.getContext("2d");
+        outlineCtx.clearRect(0, 0, outlineCanvas.width, outlineCanvas.height);
+
+        // 设置描边样式
+        outlineCtx.strokeStyle = color;
+        outlineCtx.lineWidth = lineWidth;
+        outlineCtx.lineCap = "round";
+        outlineCtx.lineJoin = "round";
+
+        // 创建二维alpha值数组
+        const alphaData = [];
+        for (let y = 0; y < height; y++) {
+          const row = [];
+          for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            row.push(data[i + 3]);
+          }
+          alphaData.push(row);
+        }
+
+        // 使用MarchingSquares提取轮廓
+        const isolines = MarchingSquaresJS.isoLines(alphaData, threshold, {
+          width,
+          height,
+        });
+
+        // 创建临时SVG以平滑路径
+        const svgContainer = document.createElement("div");
+        document.body.appendChild(svgContainer);
+        const draw = SVG(svgContainer).size(width, height);
+
+        // 将轮廓转换为SVG路径并平滑处理
+        isolines.forEach((line) => {
+          if (line.length > 2) {
+            const pathData =
+              "M " + line.map((point) => `${point[0]},${point[1]}`).join(" L ");
+            const path = draw.path(pathData).fill("none");
+            path.stroke({ color, width: lineWidth });
+            // 使用SVG.js的平滑功能
+            path.smooth();
+
+            // 将平滑后的路径绘制到Canvas
+            const pathElement = path.node;
+            const pathLength = pathElement.getTotalLength();
+            outlineCtx.beginPath();
+
+            // 以更高的精度采样SVG路径点
+            const numPoints = Math.max(50, pathLength / 2);
+            for (let i = 0; i <= numPoints; i++) {
+              const point = pathElement.getPointAtLength(
+                (i * pathLength) / numPoints
+              );
+              if (i === 0) {
+                outlineCtx.moveTo(point.x, point.y);
+              } else {
+                outlineCtx.lineTo(point.x, point.y);
+              }
+            }
+            outlineCtx.stroke();
+          }
+        });
+
+        // 清理临时SVG容器
+        document.body.removeChild(svgContainer);
+
+        // 创建临时SVG以平滑路径
+        // 移除之前的 svgContainer 声明，使用新的变量名避免重复声明
+        const tempSvgContainer = document.createElement("div");
+        document.body.appendChild(svgContainer);
+        const tempDraw = SVG(tempSvgContainer).size(width, height);
+
+        // 将轮廓转换为SVG路径并平滑处理
+        isolines.forEach((line) => {
+          if (line.length > 2) {
+            const pathData =
+              "M " + line.map((point) => `${point[0]},${point[1]}`).join(" L ");
+            const path = draw.path(pathData).fill("none");
+            path.stroke({ color, width: lineWidth });
+            // 使用SVG.js的平滑功能
+            path.smooth();
+
+            // 将平滑后的路径绘制到Canvas
+            const pathElement = path.node;
+            const pathLength = pathElement.getTotalLength();
+            outlineCtx.beginPath();
+
+            // 以更高的精度采样SVG路径点
+            const numPoints = Math.max(50, pathLength / 2);
+            for (let i = 0; i <= numPoints; i++) {
+              const point = pathElement.getPointAtLength(
+                (i * pathLength) / numPoints
+              );
+              if (i === 0) {
+                outlineCtx.moveTo(point.x, point.y);
+              } else {
+                outlineCtx.lineTo(point.x, point.y);
+              }
+            }
+            outlineCtx.stroke();
+          }
+        });
+
+        // 显示下载按钮
+        downloadBtn.classList.remove("hidden");
+      }
+
+      // 追踪轮廓函数
+      function traceContour(startX, startY, edges, width, height, ctx) {
+        // 标记已访问的点
+        const visited = new Uint8Array(width * height);
+
+        // 当前点
+        let x = startX;
+        let y = startY;
+
+        // 移动到起始点
+        ctx.moveTo(x, y);
+
+        // 标记为已访问
+        visited[y * width + x] = 1;
+        edges[y * width + x] = 0; // 避免重复处理
+
+        // 方向数组：右、右下、下、左下、左、左上、上、右上
+        const dx = [1, 1, 0, -1, -1, -1, 0, 1];
+        const dy = [0, 1, 1, 1, 0, -1, -1, -1];
+
+        // 追踪轮廓
+        let foundNeighbor = true;
+
+        while (foundNeighbor) {
+          foundNeighbor = false;
+
+          // 检查8个方向
+          for (let dir = 0; dir < 8; dir++) {
+            const nx = x + dx[dir];
+            const ny = y + dy[dir];
+
+            // 检查边界
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+              continue;
+            }
+
+            // 如果是边缘点且未访问过
+            if (edges[ny * width + nx] === 255 && !visited[ny * width + nx]) {
+              // 连接到这个点
+              ctx.lineTo(nx, ny);
+
+              // 更新当前点
+              x = nx;
+              y = ny;
+
+              // 标记为已访问
+              visited[y * width + x] = 1;
+              edges[y * width + x] = 0; // 避免重复处理
+
+              foundNeighbor = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // 下载结果函数
+      function downloadResult() {
+        // 创建一个新的画布，包含透明背景和轮廓
+        const resultCanvas = document.createElement("canvas");
+        resultCanvas.width = outlineCanvas.width;
+        resultCanvas.height = outlineCanvas.height;
+        const resultCtx = resultCanvas.getContext("2d");
+
+        // 绘制轮廓到新画布
+        resultCtx.drawImage(outlineCanvas, 0, 0);
+
+        // 创建下载链接
+        const downloadLink = document.createElement("a");
+        downloadLink.download = "outline-result.png";
+
+        // 将画布转换为图片URL
+        downloadLink.href = resultCanvas.toDataURL("image/png");
+
+        // 模拟点击下载
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
+    </script>
+  </body>
+</html>

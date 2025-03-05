@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图像反差压缩算法</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .upload-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .control-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        .image-display {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .image-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            flex: 1;
+            min-width: 300px;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+        }
+        .stats {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="file"] {
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .slider-value {
+            display: inline-block;
+            width: 40px;
+            text-align: right;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>图像反差压缩算法</h1>
+    
+    <div class="container">
+        <div class="upload-section">
+            <input type="file" id="imageLoader" accept="image/*">
+            <p>支持的格式: JPG, PNG, GIF, BMP</p>
+        </div>
+        
+        <div class="controls hidden" id="controlsSection">
+            <div class="control-group">
+                <label for="contrastThreshold">对比度阈值 <span class="slider-value" id="contrastThresholdValue">10</span></label>
+                <input type="range" id="contrastThreshold" min="1" max="50" value="10">
+                <p>较低的值会保留更多细节，较高的值会增加压缩率</p>
+            </div>
+            
+            <div class="control-group">
+                <label for="compressionStrength">压缩强度 <span class="slider-value" id="compressionStrengthValue">50</span>%</label>
+                <input type="range" id="compressionStrength" min="0" max="100" value="50">
+                <p>控制低对比度区域的压缩程度</p>
+            </div>
+            
+            <div class="control-group">
+                <label for="blockSize">分析块大小 <span class="slider-value" id="blockSizeValue">4</span>px</label>
+                <input type="range" id="blockSize" min="1" max="16" value="4">
+                <p>分析相邻像素的区域大小</p>
+            </div>
+            
+            <div class="control-group">
+                <button id="compressBtn">压缩图像</button>
+                <button id="downloadBtn" class="hidden">下载压缩图像</button>
+            </div>
+        </div>
+        
+        <div class="image-display">
+            <div class="image-container">
+                <h3>原始图像</h3>
+                <canvas id="originalCanvas"></canvas>
+                <div class="stats" id="originalStats"></div>
+            </div>
+            
+            <div class="image-container">
+                <h3>压缩后图像</h3>
+                <canvas id="compressedCanvas"></canvas>
+                <div class="stats" id="compressedStats"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 获取DOM元素
+        const imageLoader = document.getElementById('imageLoader');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const compressedCanvas = document.getElementById('compressedCanvas');
+        const originalStats = document.getElementById('originalStats');
+        const compressedStats = document.getElementById('compressedStats');
+        const controlsSection = document.getElementById('controlsSection');
+        const compressBtn = document.getElementById('compressBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        
+        // 获取滑块元素
+        const contrastThreshold = document.getElementById('contrastThreshold');
+        const compressionStrength = document.getElementById('compressionStrength');
+        const blockSize = document.getElementById('blockSize');
+        
+        // 获取滑块值显示元素
+        const contrastThresholdValue = document.getElementById('contrastThresholdValue');
+        const compressionStrengthValue = document.getElementById('compressionStrengthValue');
+        const blockSizeValue = document.getElementById('blockSizeValue');
+        
+        // 原始图像数据
+        let originalImage = null;
+        
+        // 更新滑块值显示
+        contrastThreshold.addEventListener('input', () => {
+            contrastThresholdValue.textContent = contrastThreshold.value;
+        });
+        
+        compressionStrength.addEventListener('input', () => {
+            compressionStrengthValue.textContent = compressionStrength.value;
+        });
+        
+        blockSize.addEventListener('input', () => {
+            blockSizeValue.textContent = blockSize.value;
+        });
+        
+        // 加载图像
+        imageLoader.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                originalImage = new Image();
+                originalImage.onload = function() {
+                    // 显示控制面板
+                    controlsSection.classList.remove('hidden');
+                    
+                    // 绘制原始图像
+                    drawOriginalImage();
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // 绘制原始图像
+        function drawOriginalImage() {
+            // 设置画布尺寸
+            originalCanvas.width = originalImage.width;
+            originalCanvas.height = originalImage.height;
+            compressedCanvas.width = originalImage.width;
+            compressedCanvas.height = originalImage.height;
+            
+            // 绘制原始图像
+            const originalCtx = originalCanvas.getContext('2d');
+            originalCtx.drawImage(originalImage, 0, 0);
+            
+            // 显示原始图像信息
+            const originalSize = Math.round(originalCanvas.toDataURL('image/jpeg', 0.9).length / 1024);
+            originalStats.textContent = `尺寸: ${originalImage.width} x ${originalImage.height} | 大小: ~${originalSize} KB`;
+        }
+        
+        // 压缩图像按钮点击事件
+        compressBtn.addEventListener('click', compressImage);
+        
+        // 图像压缩函数
+        function compressImage() {
+            if (!originalImage) return;
+            
+            // 获取参数值
+            const threshold = parseInt(contrastThreshold.value);
+            const strength = parseInt(compressionStrength.value) / 100;
+            const bSize = parseInt(blockSize.value);
+            
+            // 获取原始图像数据
+            const originalCtx = originalCanvas.getContext('2d');
+            const imageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            
+            // 创建压缩后的图像数据
+            const compressedCtx = compressedCanvas.getContext('2d');
+            const compressedImageData = compressedCtx.createImageData(width, height);
+            const compressedData = compressedImageData.data;
+            
+            // 应用反差压缩算法
+            for (let y = 0; y < height; y += bSize) {
+                for (let x = 0; x < width; x += bSize) {
+                    // 分析当前块的对比度
+                    let contrastScore = calculateContrastScore(data, x, y, bSize, width, height);
+                    
+                    // 根据对比度决定压缩程度
+                    let compressionFactor = 1;
+                    if (contrastScore < threshold) {
+                        // 低对比度区域应用更强的压缩
+                        compressionFactor = 1 - (strength * (1 - contrastScore / threshold));
+                    }
+                    
+                    // 应用压缩到当前块
+                    applyCompression(data, compressedData, x, y, bSize, width, height, compressionFactor);
+                }
+            }
+            
+            // 将压缩后的数据绘制到画布上
+            compressedCtx.putImageData(compressedImageData, 0, 0);
+            
+            // 显示压缩后图像信息
+            const compressedSize = Math.round(compressedCanvas.toDataURL('image/jpeg', 0.9).length / 1024);
+            const compressionRatio = Math.round((1 - compressedSize / Math.round(originalCanvas.toDataURL('image/jpeg', 0.9).length / 1024)) * 100);
+            compressedStats.textContent = `尺寸: ${width} x ${height} | 大小: ~${compressedSize} KB | 压缩率: ${compressionRatio}%`;
+            
+            // 显示下载按钮
+            downloadBtn.classList.remove('hidden');
+        }
+        
+        // 计算区域对比度分数
+        function calculateContrastScore(data, startX, startY, blockSize, width, height) {
+            let totalDiff = 0;
+            let pixelCount = 0;
+            
+            // 计算块内像素的平均值
+            let avgR = 0, avgG = 0, avgB = 0;
+            let validPixels = 0;
+            
+            for (let y = startY; y < Math.min(startY + blockSize, height); y++) {
+                for (let x = startX; x < Math.min(startX + blockSize, width); x++) {
+                    const idx = (y * width + x) * 4;
+                    avgR += data[idx];
+                    avgG += data[idx + 1];
+                    avgB += data[idx + 2];
+                    validPixels++;
+                }
+            }
+            
+            avgR /= validPixels;
+            avgG /= validPixels;
+            avgB /= validPixels;
+            
+            // 计算每个像素与平均值的差异
+            for (let y = startY; y < Math.min(startY + blockSize, height); y++) {
+                for (let x = startX; x < Math.min(startX + blockSize, width); x++) {
+                    const idx = (y * width + x) * 4;
+                    const diffR = Math.abs(data[idx] - avgR);
+                    const diffG = Math.abs(data[idx + 1] - avgG);
+                    const diffB = Math.abs(data[idx + 2] - avgB);
+                    
+                    // 使用RGB差异的平均值作为对比度度量
+                    totalDiff += (diffR + diffG + diffB) / 3;
+                    pixelCount++;
+                }
+            }
+            
+            // 返回归一化的对比度分数 (0-50范围)
+            return Math.min(50, totalDiff / pixelCount);
+        }
+        
+        // 应用压缩到指定区域
+        function applyCompression(srcData, destData, startX, startY, blockSize, width, height, factor) {
+            // 对于低对比度区域，我们可以应用平滑或量化
+            // 这里使用简单的平均值平滑作为示例
+            
+            for (let y = startY; y < Math.min(startY + blockSize, height); y++) {
+                for (let x = startX; x < Math.min(startX + blockSize, width); x++) {
+                    const idx = (y * width + x) * 4;
+                    
+                    if (factor < 1) {
+                        // 低对比度区域应用平滑
+                        // 计算块内平均颜色
+                        let avgR = 0, avgG = 0, avgB = 0;
+                        let count = 0;
+                        
+                        // 计算周围像素的平均值
+                        for (let ny = Math.max(0, y - 1); ny <= Math.min(height - 1, y + 1); ny++) {
+                            for (let nx = Math.max(0, x - 1); nx <= Math.min(width - 1, x + 1); nx++) {
+                                const nidx = (ny * width + nx) * 4;
+                                avgR += srcData[nidx];
+                                avgG += srcData[nidx + 1];
+                                avgB += srcData[nidx + 2];
+                                count++;
+                            }
+                        }
+                        
+                        avgR /= count;
+                        avgG /= count;
+                        avgB /= count;
+                        
+                        // 根据压缩因子混合原始颜色和平滑颜色
+                        destData[idx] = Math.round(srcData[idx] * factor + avgR * (1 - factor));
+                        destData[idx + 1] = Math.round(srcData[idx + 1] * factor + avgG * (1 - factor));
+                        destData[idx + 2] = Math.round(srcData[idx + 2] * factor + avgB * (1 - factor));
+                        destData[idx + 3] = srcData[idx + 3]; // 保持原始透明度
+                    } else {
+                        // 高对比度区域保持原样
+                        destData[idx] = srcData[idx];
+                        destData[idx + 1] = srcData[idx + 1];
+                        destData[idx + 2] = srcData[idx + 2];
+                        destData[idx + 3] = srcData[idx + 3];
+                    }
+                }
+            }
+        }
+        
+        // 下载按钮点击事件
+        downloadBtn.addEventListener('click', function() {
+            // 创建下载链接
+            const link = document.createElement('a');
+            link.download = 'compressed-image.png';
+            link.href = compressedCanvas.toDataURL('image/jpeg', 0.9);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
